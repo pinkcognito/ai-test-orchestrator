@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from .models import NarrativeScore, TurnResult
@@ -40,6 +41,16 @@ Respond with ONLY a JSON object:
 """
 
 
+def _safe_substitute(template: str, values: dict[str, str]) -> str:
+    """Substitute {key} placeholders without using str.format(), avoiding brace injection."""
+
+    def _replace(match: re.Match) -> str:
+        key = match.group(1)
+        return values.get(key, match.group(0))
+
+    return re.sub(r"\{([a-z_]+)\}", _replace, template)
+
+
 class NarrativeJudge:
     """
     Scores narrative quality using an LLM with a configurable rubric.
@@ -62,12 +73,12 @@ class NarrativeJudge:
         self._llm = llm_callable
         self._rubric = rubric_template
         self._cache: dict[str, NarrativeScore] = {}
-        self._total_tokens: int = 0
+        self._approx_word_count: int = 0
 
     @property
-    def total_tokens(self) -> int:
-        """Approximate token usage across all judge calls."""
-        return self._total_tokens
+    def approx_word_count(self) -> int:
+        """Approximate word count across all judge calls (not a token count)."""
+        return self._approx_word_count
 
     def score_turn(
         self,
@@ -88,19 +99,22 @@ class NarrativeJudge:
         if self._llm is None:
             return NarrativeScore(rationale="No LLM configured; offline mode")
 
-        prompt = self._rubric.format(
-            action=turn_result.action,
-            state_update=json.dumps(turn_result.state_update, indent=2),
-            world_state_summary=json.dumps(
-                {k: v for k, v in world_state.items() if k in ("location", "pc_name", "pc_hp", "turn")},
-                indent=2,
-            ),
-            narrative=turn_result.narrative,
+        prompt = _safe_substitute(
+            self._rubric,
+            {
+                "action": turn_result.action,
+                "state_update": json.dumps(turn_result.state_update, indent=2),
+                "world_state_summary": json.dumps(
+                    {k: v for k, v in world_state.items() if k in ("location", "pc_name", "pc_hp", "turn")},
+                    indent=2,
+                ),
+                "narrative": turn_result.narrative,
+            },
         )
 
         try:
             response = self._llm("You are a narrative quality evaluator.", prompt)
-            self._total_tokens += len(prompt.split()) + len(response.split())  # rough estimate
+            self._approx_word_count += len(prompt.split()) + len(response.split())
             score = self._parse_response(response)
         except Exception as e:
             logger.error("NarrativeJudge LLM call failed: %s", e)
@@ -128,6 +142,11 @@ class NarrativeJudge:
         }
 
     @staticmethod
+    def _clamp(value: float, lo: float = 0.0, hi: float = 5.0) -> float:
+        """Clamp a value to [lo, hi] range."""
+        return max(lo, min(hi, value))
+
+    @staticmethod
     def _parse_response(response: str) -> NarrativeScore:
         """Parse LLM JSON response into NarrativeScore."""
         # Strip markdown fences if present
@@ -139,11 +158,12 @@ class NarrativeJudge:
                 text = text[:-3]
 
         data = json.loads(text)
+        clamp = NarrativeJudge._clamp
         return NarrativeScore(
-            tone_consistency=float(data.get("tone_consistency", 0)),
-            action_acknowledgment=float(data.get("action_acknowledgment", 0)),
-            immersion=float(data.get("immersion", 0)),
-            mechanical_accuracy=float(data.get("mechanical_accuracy", 0)),
-            continuity=float(data.get("continuity", 0)),
+            tone_consistency=clamp(float(data.get("tone_consistency", 0))),
+            action_acknowledgment=clamp(float(data.get("action_acknowledgment", 0))),
+            immersion=clamp(float(data.get("immersion", 0))),
+            mechanical_accuracy=clamp(float(data.get("mechanical_accuracy", 0))),
+            continuity=clamp(float(data.get("continuity", 0))),
             rationale=str(data.get("rationale", "")),
         )

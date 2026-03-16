@@ -27,6 +27,16 @@ class InvariantCheck(Protocol):
         """Severity level: CRITICAL, ERROR, or WARNING."""
         ...
 
+    @property
+    def tags(self) -> tuple[str, ...]:
+        """
+        Tags that determine when this check should run.
+
+        An empty tuple means the check runs on all turns. Otherwise, the
+        check only runs on turns whose tags intersect this set.
+        """
+        ...
+
     def check(
         self,
         turn_result: TurnResult,
@@ -56,6 +66,7 @@ class BaseInvariantCheck:
 
     _name: str = "unnamed_check"
     _severity: Severity = Severity.ERROR
+    _tags: tuple[str, ...] = ()
 
     @property
     def name(self) -> str:
@@ -64,6 +75,10 @@ class BaseInvariantCheck:
     @property
     def severity(self) -> Severity:
         return self._severity
+
+    @property
+    def tags(self) -> tuple[str, ...]:
+        return self._tags
 
     def check(
         self,

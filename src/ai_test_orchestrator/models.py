@@ -9,7 +9,7 @@ scenario configuration.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
@@ -24,6 +24,10 @@ class Severity(StrEnum):
     CRITICAL = "critical"
     ERROR = "error"
     WARNING = "warning"
+
+
+class CriticalFailureError(Exception):
+    """Raised when a CRITICAL invariant check fails in fail-fast mode."""
 
 
 class Verdict(StrEnum):
@@ -88,7 +92,7 @@ class TurnResult:
     state_update: dict[str, Any] = field(default_factory=dict)
     world_state_snapshot: dict[str, Any] = field(default_factory=dict)
     raw_response: str = ""
-    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     tags: tuple[str, ...] = ()
     extra: dict[str, Any] = field(default_factory=dict)
 

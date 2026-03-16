@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import random
 import tempfile
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 from ai_test_orchestrator.invariant_checker import InvariantChecker
@@ -66,13 +69,59 @@ class TestLoadScenario:
             Path(path).unlink(missing_ok=True)
 
 
+class TestLoadScenarioValidation:
+    def test_non_dict_yaml_raises(self) -> None:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write("- just\n- a\n- list\n")
+            path = f.name
+        try:
+            with pytest.raises(ValueError, match="YAML mapping"):
+                load_scenario(path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    def test_action_missing_input_raises(self) -> None:
+        data = {"name": "bad", "actions": [{"tags": ["oops"]}]}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(data, f)
+            path = f.name
+        try:
+            with pytest.raises(ValueError, match="non-empty 'input'"):
+                load_scenario(path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    def test_invalid_max_turns_raises(self) -> None:
+        data = {"name": "bad", "max_turns": -5, "actions": []}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(data, f)
+            path = f.name
+        try:
+            with pytest.raises(ValueError, match="positive integer"):
+                load_scenario(path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    def test_empty_name_raises(self) -> None:
+        data = {"name": "", "actions": []}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(data, f)
+            path = f.name
+        try:
+            with pytest.raises(ValueError, match="non-empty string"):
+                load_scenario(path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+
 class TestScenarioRunner:
-    def _make_scenario_file(self, actions: list[str]) -> str:
+    def _make_scenario_file(self, actions: list[str], **kwargs: Any) -> str:
         data = {
             "name": "integration_test",
             "system": "test",
             "seed": 1,
             "actions": [{"input": a} for a in actions],
+            **kwargs,
         }
         f = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
         yaml.dump(data, f)
@@ -127,7 +176,7 @@ class TestScenarioRunner:
         finally:
             Path(path).unlink(missing_ok=True)
 
-    def test_transcript_written(self) -> None:
+    def test_transcript_has_metadata_and_turns(self) -> None:
         path = self._make_scenario_file(["x", "y"])
         try:
             scenario = load_scenario(path)
@@ -137,7 +186,10 @@ class TestScenarioRunner:
                 report = runner.run()
                 assert Path(report.transcript_path).exists()
                 lines = Path(report.transcript_path).read_text().strip().split("\n")
-                assert len(lines) == 2
+                assert len(lines) == 3  # 1 metadata + 2 turns
+                meta = json.loads(lines[0])
+                assert meta["type"] == "metadata"
+                assert meta["seed"] == 1
         finally:
             Path(path).unlink(missing_ok=True)
 
@@ -157,5 +209,82 @@ class TestScenarioRunner:
                 runner = ScenarioRunner(sut=sut, scenario=scenario, transcript_dir=d)
                 report = runner.run()
             assert report.turns_executed == 2
+        finally:
+            Path(f.name).unlink(missing_ok=True)
+
+    def test_rng_seeded_deterministically(self) -> None:
+        path = self._make_scenario_file(["a"], seed=42)
+        try:
+            scenario = load_scenario(path)
+            sut = StubSUT()
+            with tempfile.TemporaryDirectory() as d:
+                runner = ScenarioRunner(sut=sut, scenario=scenario, transcript_dir=d)
+                runner.run()
+                val1 = random.random()
+
+            # Run again with same seed — should produce same random value
+            scenario2 = load_scenario(path)
+            sut2 = StubSUT()
+            with tempfile.TemporaryDirectory() as d:
+                runner2 = ScenarioRunner(sut=sut2, scenario=scenario2, transcript_dir=d)
+                runner2.run()
+                val2 = random.random()
+
+            assert val1 == val2
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    def test_check_results_exposed(self) -> None:
+        class PassCheck(BaseInvariantCheck):
+            _name = "pass_check"
+            _severity = Severity.ERROR
+
+            def _check(self, tr, ws, h):
+                return self._pass(tr)
+
+        path = self._make_scenario_file(["a", "b"])
+        try:
+            scenario = load_scenario(path)
+            sut = StubSUT()
+            checker = InvariantChecker(checks=[PassCheck()])
+            with tempfile.TemporaryDirectory() as d:
+                runner = ScenarioRunner(sut=sut, scenario=scenario, checker=checker, transcript_dir=d)
+                runner.run()
+                assert len(runner.check_results) == 2
+                assert all(r.passed for r in runner.check_results)
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    def test_framework_version_in_report(self) -> None:
+        path = self._make_scenario_file(["a"])
+        try:
+            scenario = load_scenario(path)
+            sut = StubSUT()
+            with tempfile.TemporaryDirectory() as d:
+                runner = ScenarioRunner(sut=sut, scenario=scenario, transcript_dir=d)
+                report = runner.run()
+                assert report.framework_version == "0.1.0"
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    def test_path_traversal_sanitized(self) -> None:
+        data = {
+            "name": "../../etc/evil",
+            "system": "test",
+            "seed": 1,
+            "actions": [{"input": "a"}],
+        }
+        f = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
+        yaml.dump(data, f)
+        f.close()
+        try:
+            scenario = load_scenario(f.name)
+            sut = StubSUT()
+            with tempfile.TemporaryDirectory() as d:
+                runner = ScenarioRunner(sut=sut, scenario=scenario, transcript_dir=d)
+                report = runner.run()
+                # Transcript should be inside the transcript dir, not escaped
+                assert Path(report.transcript_path).parent == Path(d)
+                assert ".." not in Path(report.transcript_path).name
         finally:
             Path(f.name).unlink(missing_ok=True)
