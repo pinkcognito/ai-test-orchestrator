@@ -1,0 +1,31 @@
+---
+description: AI Test Orchestrator development rules
+globs: "**/*"
+---
+
+# AI Test Orchestrator — Cursor Rules
+
+## Project Overview
+Reusable AI-driven end-to-end testing framework. Three-agent architecture: Player Agent → SUT → Judge Agent. Framework-agnostic — application-specific invariants and adapters live in consuming repos.
+
+## Architecture
+- `SUTAdapter` protocol is THE integration point. Never add game/app-specific logic to the framework.
+- `InvariantCheck` protocol: name, severity, check(turn_result, world_state, history) → CheckResult.
+- `BaseInvariantCheck` provides `_pass()` and `_fail()` helpers. Subclass this for convenience.
+- `TurnResult` is frozen (immutable). Never mutate it.
+- `NarrativeJudge` is optional (behind `[llm]` extra). Must work in offline mode (zero scores).
+
+## Code Style
+- Python 3.11+. Use `from __future__ import annotations` everywhere.
+- Ruff for linting and formatting (see pyproject.toml).
+- All public functions and classes need docstrings.
+- Type hints on all function signatures.
+- Tests use pytest. Each module has a corresponding `test_*.py`.
+
+## Key Rules
+- NEVER add application-specific logic (no GURPS, no d20, no NPC, no combat references).
+- The framework must work with ANY SUT that implements the protocol.
+- All randomness must be seedable for deterministic replay.
+- Severity levels: CRITICAL fails suite (fail-fast halts), ERROR fails test, WARNING logs only.
+- Reports are JSON. Transcripts are JSONL. Both go in test_results/.
+- Pre-commit hook runs ruff. Configure with: `git config core.hooksPath .githooks`
