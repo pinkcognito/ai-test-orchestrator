@@ -54,3 +54,22 @@ class TestPlayerAgent:
         agent = PlayerAgent(self._make_scenario([]))
         assert agent.has_next is False
         assert agent.next_action() is None
+
+    def test_last_step_none_before_first_action(self) -> None:
+        agent = PlayerAgent(self._make_scenario(["a", "b"]))
+        assert agent.last_step is None
+
+    def test_last_step_tracks_executed_actions(self) -> None:
+        agent = PlayerAgent(self._make_scenario(["first", "second"]))
+        agent.next_action()
+        assert agent.last_step is not None
+        assert agent.last_step.input == "first"
+        agent.next_action()
+        assert agent.last_step.input == "second"
+
+    def test_last_step_persists_after_exhaustion(self) -> None:
+        agent = PlayerAgent(self._make_scenario(["only"]))
+        agent.next_action()
+        agent.next_action()  # returns None (exhausted)
+        assert agent.last_step is not None
+        assert agent.last_step.input == "only"

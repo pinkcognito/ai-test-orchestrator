@@ -28,7 +28,10 @@ ai-test-orchestrator = "ai_test_orchestrator.cli:main"
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-v --tb=short"
-filterwarnings = ["ignore::DeprecationWarning"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::pytest.PytestCollectionWarning",
+]
 
 [tool.coverage.run]
 source = ["src/ai_test_orchestrator"]

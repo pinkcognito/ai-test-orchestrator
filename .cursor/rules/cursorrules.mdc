@@ -29,3 +29,9 @@ Reusable AI-driven end-to-end testing framework. Three-agent architecture: Playe
 - Severity levels: CRITICAL fails suite (fail-fast halts), ERROR fails test, WARNING logs only.
 - Reports are JSON. Transcripts are JSONL. Both go in test_results/.
 - Pre-commit hook runs ruff. Configure with: `git config core.hooksPath .githooks`
+
+## Git Workflow
+- **NEVER commit directly to `main`.** Always create a feature branch first.
+- Branch naming: `feature/<short-description>` or `fix/<short-description>`.
+- When you finish a piece of work, commit to the feature branch and tell the user it's ready for review/PR.
+- Run `ruff check` and `pytest` before committing. All tests must pass.

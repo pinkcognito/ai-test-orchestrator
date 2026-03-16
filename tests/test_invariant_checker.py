@@ -6,7 +6,7 @@ import pytest
 
 from ai_test_orchestrator.invariant_checker import InvariantChecker
 from ai_test_orchestrator.invariants.base import BaseInvariantCheck
-from ai_test_orchestrator.models import Severity, TurnResult
+from ai_test_orchestrator.models import CriticalFailureError, Severity, TurnResult
 
 
 class AlwaysPassCheck(BaseInvariantCheck):
@@ -64,9 +64,9 @@ class TestInvariantChecker:
         checker.check_turn(_make_turn(), {}, [])
         assert checker.has_critical_failure is True
 
-    def test_fail_fast_raises_stop_iteration(self) -> None:
+    def test_fail_fast_raises_critical_failure_error(self) -> None:
         checker = InvariantChecker(checks=[CriticalFailCheck()], fail_fast=True)
-        with pytest.raises(StopIteration, match="Critical failure"):
+        with pytest.raises(CriticalFailureError, match="Critical failure"):
             checker.check_turn(_make_turn(), {}, [])
 
     def test_fail_fast_does_not_trigger_on_error(self) -> None:
@@ -115,3 +115,40 @@ class TestInvariantChecker:
         assert not results[0].passed
         assert results[0].severity == Severity.CRITICAL
         assert "exception" in results[0].message
+
+
+class TestTagFiltering:
+    def test_untagged_check_runs_on_all_turns(self) -> None:
+        checker = InvariantChecker(checks=[AlwaysPassCheck()])
+        turn = TurnResult(turn_number=1, action="x", narrative="y", tags=("combat",))
+        results = checker.check_turn(turn, {}, [])
+        assert len(results) == 1
+
+    def test_tagged_check_skipped_on_non_matching_turn(self) -> None:
+        class CombatCheck(BaseInvariantCheck):
+            _name = "combat_only"
+            _severity = Severity.ERROR
+            _tags = ("combat",)
+
+            def _check(self, turn_result, world_state, history):
+                return self._pass(turn_result)
+
+        checker = InvariantChecker(checks=[CombatCheck()])
+        turn = TurnResult(turn_number=1, action="x", narrative="y", tags=("social",))
+        results = checker.check_turn(turn, {}, [])
+        assert len(results) == 0
+
+    def test_tagged_check_runs_on_matching_turn(self) -> None:
+        class CombatCheck(BaseInvariantCheck):
+            _name = "combat_only"
+            _severity = Severity.ERROR
+            _tags = ("combat",)
+
+            def _check(self, turn_result, world_state, history):
+                return self._pass(turn_result)
+
+        checker = InvariantChecker(checks=[CombatCheck()])
+        turn = TurnResult(turn_number=1, action="x", narrative="y", tags=("combat", "melee"))
+        results = checker.check_turn(turn, {}, [])
+        assert len(results) == 1
+        assert results[0].passed

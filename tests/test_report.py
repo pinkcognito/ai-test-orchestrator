@@ -60,20 +60,66 @@ class TestTestReport:
         finally:
             Path(path).unlink(missing_ok=True)
 
+    def test_framework_version_in_report(self) -> None:
+        r = TestReport(scenario="test", system="gurps4e", seed=42, turns_executed=1, duration_seconds=0.1)
+        assert r.framework_version == "0.1.0"
+        d = r.to_dict()
+        assert "framework_version" in d
+        assert d["framework_version"] == "0.1.0"
+
 
 class TestWriteTranscript:
-    def test_writes_jsonl(self) -> None:
+    def test_writes_jsonl_with_metadata_header(self) -> None:
         turns = [
             TurnResult(turn_number=1, action="look", narrative="A room."),
             TurnResult(turn_number=2, action="go north", narrative="A hallway."),
         ]
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "transcript.jsonl"
-            write_transcript(turns, path)
+            write_transcript(
+                turns, path, seed=42, framework_version="0.1.0", scenario="test_scenario", system="gurps4e"
+            )
             lines = path.read_text().strip().split("\n")
-            assert len(lines) == 2
-            assert json.loads(lines[0])["action"] == "look"
-            assert json.loads(lines[1])["turn_number"] == 2
+            assert len(lines) == 3  # 1 metadata + 2 turns
+            meta = json.loads(lines[0])
+            assert meta["type"] == "metadata"
+            assert meta["seed"] == 42
+            assert meta["framework_version"] == "0.1.0"
+            assert meta["scenario"] == "test_scenario"
+            assert json.loads(lines[1])["action"] == "look"
+            assert json.loads(lines[2])["turn_number"] == 2
+
+    def test_transcript_includes_world_state_snapshot(self) -> None:
+        turns = [
+            TurnResult(
+                turn_number=1,
+                action="look",
+                narrative="A room.",
+                world_state_snapshot={"location": "tavern", "hp": "10/12"},
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "transcript.jsonl"
+            write_transcript(turns, path, seed=1, framework_version="0.1.0", scenario="test", system="test")
+            lines = path.read_text().strip().split("\n")
+            turn_data = json.loads(lines[1])
+            assert turn_data["world_state_snapshot"]["location"] == "tavern"
+
+    def test_transcript_includes_extra(self) -> None:
+        turns = [
+            TurnResult(
+                turn_number=1,
+                action="look",
+                narrative="A room.",
+                extra={"custom_field": "value"},
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "transcript.jsonl"
+            write_transcript(turns, path, seed=1, framework_version="0.1.0", scenario="test", system="test")
+            lines = path.read_text().strip().split("\n")
+            turn_data = json.loads(lines[1])
+            assert turn_data["extra"]["custom_field"] == "value"
 
 
 class TestConsoleSummary:

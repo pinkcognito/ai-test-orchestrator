@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ._version import __version__ as _framework_version
 from .models import TurnResult, Verdict
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class TestReport:
     narrative_scores: dict[str, float] | None = None
     verdict: Verdict = Verdict.PASS
     transcript_path: str = ""
+    framework_version: str = _framework_version
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -65,11 +67,28 @@ class TestReport:
         return Verdict.PASS
 
 
-def write_transcript(turns: list[TurnResult], path: str | Path) -> None:
-    """Write turn results as JSONL (one JSON object per line)."""
+def write_transcript(
+    turns: list[TurnResult],
+    path: str | Path,
+    *,
+    seed: int | None,
+    framework_version: str,
+    scenario: str,
+    system: str,
+) -> None:
+    """Write turn results as JSONL (metadata header + one JSON object per turn)."""
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", encoding="utf-8") as f:
+        metadata = {
+            "turn_number": 0,
+            "type": "metadata",
+            "seed": seed,
+            "framework_version": framework_version,
+            "scenario": scenario,
+            "system": system,
+        }
+        f.write(json.dumps(metadata, ensure_ascii=False) + "\n")
         for turn in turns:
             # Convert frozen dataclass to dict for serialisation
             d = {
@@ -77,8 +96,10 @@ def write_transcript(turns: list[TurnResult], path: str | Path) -> None:
                 "action": turn.action,
                 "narrative": turn.narrative,
                 "state_update": turn.state_update,
+                "world_state_snapshot": turn.world_state_snapshot,
                 "tags": list(turn.tags),
                 "timestamp": turn.timestamp,
+                "extra": turn.extra,
             }
             f.write(json.dumps(d, ensure_ascii=False) + "\n")
     logger.info("Transcript written to %s (%d turns)", path, len(turns))

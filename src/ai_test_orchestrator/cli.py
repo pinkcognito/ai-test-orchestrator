@@ -91,6 +91,8 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
+    logger = logging.getLogger(__name__)
+
     # Import adapter
     adapter_cls = _import_adapter(args.adapter)
 
@@ -110,6 +112,13 @@ def main(argv: list[str] | None = None) -> int:
             scenario.seed = args.seed
         if args.fail_fast:
             scenario.fail_fast = True
+
+        logger.info(
+            "Starting scenario '%s' (system=%s, seed=%s)",
+            scenario.name,
+            scenario.system,
+            scenario.seed if scenario.seed is not None else "none",
+        )
 
         sut = adapter_cls()
         checker = InvariantChecker(checks=checks or None, fail_fast=scenario.fail_fast)
