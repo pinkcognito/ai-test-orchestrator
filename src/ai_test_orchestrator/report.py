@@ -93,7 +93,7 @@ def console_summary(report: TestReport) -> str:
         f"  Seed:     {report.seed or 'none'}",
         f"  Turns:    {report.turns_executed}",
         f"  Duration: {report.duration_seconds:.1f}s",
-        f"{'─' * 60}",
+        f"{'-' * 60}",
     ]
 
     for severity in ["critical", "error", "warning"]:
@@ -105,10 +105,10 @@ def console_summary(report: TestReport) -> str:
         label = severity.upper().ljust(10)
         lines.append(f"  {label} {passed}/{total} passed  [{status}]")
         for failure in data.get("failures", []):
-            lines.append(f"           └─ turn {failure['turn']}: {failure['message']}")
+            lines.append(f"           +-- turn {failure['turn']}: {failure['message']}")
 
     if report.narrative_scores:
-        lines.append(f"{'─' * 60}")
+        lines.append(f"{'-' * 60}")
         lines.append("  Narrative scores:")
         for key, val in report.narrative_scores.items():
             lines.append(f"    {key}: {val:.2f}")
@@ -116,7 +116,7 @@ def console_summary(report: TestReport) -> str:
     verdict_str = report.verdict.value.upper().replace("_", " ")
     lines.extend(
         [
-            f"{'─' * 60}",
+            f"{'-' * 60}",
             f"  VERDICT: {verdict_str}",
             f"{'=' * 60}",
         ]
