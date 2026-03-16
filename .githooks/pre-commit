@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Pre-commit hook: run ruff auto-fix and format on staged Python files.
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$')
+
+if [ -z "$STAGED" ]; then
+    exit 0
+fi
+
+echo "Pre-commit: running ruff on $(echo "$STAGED" | wc -w | tr -d ' ') Python file(s)..."
+
+# Auto-fix lint issues
+python -m ruff check --fix $STAGED 2>/dev/null
+FIX_EXIT=$?
+
+# Format
+python -m ruff format $STAGED 2>/dev/null
+
+# Re-stage auto-fixed files
+for f in $STAGED; do
+    if [ -f "$f" ]; then
+        git add "$f"
+    fi
+done
+
+# Check for remaining unfixable errors
+python -m ruff check $STAGED 2>/dev/null
+if [ $? -ne 0 ]; then
+    echo "Pre-commit: ruff found unfixable errors. Commit blocked."
+    exit 1
+fi
+
+echo "Pre-commit: ruff checks passed."
+exit 0
