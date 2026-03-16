@@ -3,12 +3,13 @@ Scenario Runner — orchestrates the test loop.
 
 Loads a scenario config, creates a PlayerAgent, drives the SUT,
 runs invariant checks per turn, optionally scores narrative quality,
-and produces a TestReport.
+and produces a ScenarioReport.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -16,10 +17,10 @@ from typing import Any
 import yaml
 
 from .invariant_checker import InvariantChecker
-from .models import ActionStep, ScenarioConfig, SUTAdapter, TurnResult
+from .models import ActionStep, CriticalFailureError, ScenarioConfig, SUTAdapter, TurnResult
 from .narrative_judge import NarrativeJudge
 from .player_agent import PlayerAgent
-from .report import TestReport, write_transcript
+from .report import ScenarioReport, write_transcript
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,11 @@ logger = logging.getLogger(__name__)
 def load_scenario(path: str | Path) -> ScenarioConfig:
     """Load a scenario from a YAML file."""
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"Scenario file must contain a YAML mapping, got {type(data).__name__}")
+    for i, a in enumerate(data.get("actions", [])):
+        if not isinstance(a, dict) or "input" not in a:
+            raise ValueError(f"Action at index {i} must be a mapping with an 'input' key")
     actions = [
         ActionStep(
             input=a["input"],
@@ -53,7 +59,7 @@ class ScenarioRunner:
     Orchestrates a single scenario execution.
 
     Drives the SUT through a PlayerAgent, runs InvariantChecker per turn,
-    optionally runs NarrativeJudge, and produces a TestReport.
+    optionally runs NarrativeJudge, and produces a ScenarioReport.
     """
 
     def __init__(
@@ -77,13 +83,13 @@ class ScenarioRunner:
     def turns(self) -> list[TurnResult]:
         return list(self._turns)
 
-    def run(self) -> TestReport:
+    def run(self) -> ScenarioReport:
         """
-        Execute the full scenario and return a TestReport.
+        Execute the full scenario and return a ScenarioReport.
 
         Steps:
         1. Set up the SUT with scenario config.
-        2. Loop: PlayerAgent produces action → SUT processes → collect TurnResult → run invariants.
+        2. Loop: PlayerAgent produces action -> SUT processes -> collect TurnResult -> run invariants.
         3. Optionally score narrative quality.
         4. Produce report.
         """
@@ -110,7 +116,8 @@ class ScenarioRunner:
                 turn_num += 1
                 raw_result = self._sut.process_turn(action)
 
-                tags = tuple(self._scenario.actions[self._agent._index - 1].tags) if self._agent._index > 0 else ()
+                step = self._agent.last_step
+                tags = tuple(step.tags) if step is not None else ()
 
                 turn = TurnResult(
                     turn_number=turn_num,
@@ -129,7 +136,7 @@ class ScenarioRunner:
                 self._turns.append(turn)
                 self._world_states.append(turn.world_state_snapshot)
 
-        except StopIteration as e:
+        except CriticalFailureError as e:
             logger.warning("Scenario halted by fail-fast: %s", e)
 
         finally:
@@ -137,8 +144,9 @@ class ScenarioRunner:
 
         duration = time.monotonic() - start
 
-        # Write transcript
-        transcript_name = f"{self._scenario.name}_{self._scenario.seed or 'noseed'}.jsonl"
+        # Write transcript (sanitize scenario name to prevent path traversal)
+        safe_name = re.sub(r"[^\w\-.]", "_", self._scenario.name)
+        transcript_name = f"{safe_name}_{self._scenario.seed or 'noseed'}.jsonl"
         transcript_path = self._transcript_dir / transcript_name
         write_transcript(self._turns, transcript_path)
 
@@ -151,9 +159,9 @@ class ScenarioRunner:
             scores = self._judge.score_transcript(self._turns, self._world_states)
             narrative_scores = self._judge.aggregate(scores)
 
-        verdict = TestReport.compute_verdict(inv_summary)
+        verdict = ScenarioReport.compute_verdict(inv_summary)
 
-        report = TestReport(
+        report = ScenarioReport(
             scenario=self._scenario.name,
             system=self._scenario.system,
             seed=self._scenario.seed,

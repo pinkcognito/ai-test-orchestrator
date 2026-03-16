@@ -15,7 +15,7 @@ from typing import Any
 
 from .invariants import get_all_checks
 from .invariants.base import InvariantCheck
-from .models import CheckResult, Severity, TurnResult
+from .models import CheckResult, CriticalFailureError, Severity, TurnResult
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class InvariantChecker:
         Returns the list of CheckResults for this turn. Results are
         also accumulated in self.results.
 
-        Raises StopIteration if fail_fast is True and a CRITICAL check fails.
+        Raises CriticalFailureError if fail_fast is True and a CRITICAL check fails.
         """
         turn_results: list[CheckResult] = []
 
@@ -94,7 +94,7 @@ class InvariantChecker:
                 )
 
             if self._fail_fast and not result.passed and result.severity == Severity.CRITICAL:
-                raise StopIteration(f"Critical failure in {check.name}: {result.message}")
+                raise CriticalFailureError(f"Critical failure in {check.name}: {result.message}")
 
         return turn_results
 

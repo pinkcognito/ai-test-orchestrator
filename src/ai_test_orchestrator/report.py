@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class TestReport:
+class ScenarioReport:
     """Structured report from a single scenario execution."""
 
     scenario: str
@@ -84,7 +84,7 @@ def write_transcript(turns: list[TurnResult], path: str | Path) -> None:
     logger.info("Transcript written to %s (%d turns)", path, len(turns))
 
 
-def console_summary(report: TestReport) -> str:
+def console_summary(report: ScenarioReport) -> str:
     """Format a human-readable console summary with pass/fail counts."""
     lines = [
         f"\n{'=' * 60}",

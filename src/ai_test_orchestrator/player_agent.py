@@ -34,6 +34,7 @@ class PlayerAgent:
     def __init__(self, scenario: ScenarioConfig) -> None:
         self._scenario = scenario
         self._index = 0
+        self._last_step: ActionStep | None = None
 
     @property
     def has_next(self) -> bool:
@@ -47,6 +48,11 @@ class PlayerAgent:
             return self._scenario.actions[self._index]
         return None
 
+    @property
+    def last_step(self) -> ActionStep | None:
+        """The most recently returned action step, or None if next_action() hasn't been called."""
+        return self._last_step
+
     def next_action(self, world_state: dict[str, Any] | None = None) -> str | None:
         """
         Return the next action string, advancing the index.
@@ -58,6 +64,7 @@ class PlayerAgent:
             return None
         step = self._scenario.actions[self._index]
         self._index += 1
+        self._last_step = step
         action = step.input
 
         # Template substitution

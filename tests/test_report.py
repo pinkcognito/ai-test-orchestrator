@@ -1,4 +1,4 @@
-"""Tests for TestReport and report utilities."""
+"""Tests for ScenarioReport and report utilities."""
 
 from __future__ import annotations
 
@@ -7,17 +7,17 @@ import tempfile
 from pathlib import Path
 
 from ai_test_orchestrator.models import TurnResult, Verdict
-from ai_test_orchestrator.report import TestReport, console_summary, write_transcript
+from ai_test_orchestrator.report import ScenarioReport, console_summary, write_transcript
 
 
-class TestTestReport:
+class TestScenarioReport:
     def test_compute_verdict_pass(self) -> None:
         summary = {
             "critical": {"passed": 5, "failed": 0},
             "error": {"passed": 10, "failed": 0},
             "warning": {"passed": 3, "failed": 0},
         }
-        assert TestReport.compute_verdict(summary) == Verdict.PASS
+        assert ScenarioReport.compute_verdict(summary) == Verdict.PASS
 
     def test_compute_verdict_warnings(self) -> None:
         summary = {
@@ -25,7 +25,7 @@ class TestTestReport:
             "error": {"passed": 10, "failed": 0},
             "warning": {"passed": 3, "failed": 2},
         }
-        assert TestReport.compute_verdict(summary) == Verdict.PASS_WITH_WARNINGS
+        assert ScenarioReport.compute_verdict(summary) == Verdict.PASS_WITH_WARNINGS
 
     def test_compute_verdict_fail_error(self) -> None:
         summary = {
@@ -33,7 +33,7 @@ class TestTestReport:
             "error": {"passed": 8, "failed": 2},
             "warning": {"passed": 3, "failed": 0},
         }
-        assert TestReport.compute_verdict(summary) == Verdict.FAIL
+        assert ScenarioReport.compute_verdict(summary) == Verdict.FAIL
 
     def test_compute_verdict_fail_critical(self) -> None:
         summary = {
@@ -41,16 +41,16 @@ class TestTestReport:
             "error": {"passed": 10, "failed": 0},
             "warning": {"passed": 3, "failed": 0},
         }
-        assert TestReport.compute_verdict(summary) == Verdict.FAIL
+        assert ScenarioReport.compute_verdict(summary) == Verdict.FAIL
 
     def test_to_json(self) -> None:
-        r = TestReport(scenario="test", system="gurps4e", seed=42, turns_executed=5, duration_seconds=1.5)
+        r = ScenarioReport(scenario="test", system="gurps4e", seed=42, turns_executed=5, duration_seconds=1.5)
         j = json.loads(r.to_json())
         assert j["scenario"] == "test"
         assert j["verdict"] == "pass"
 
     def test_save_and_load(self) -> None:
-        r = TestReport(scenario="test", system="d20", seed=None, turns_executed=3, duration_seconds=0.5)
+        r = ScenarioReport(scenario="test", system="d20", seed=None, turns_executed=3, duration_seconds=0.5)
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             path = f.name
         try:
@@ -78,7 +78,7 @@ class TestWriteTranscript:
 
 class TestConsoleSummary:
     def test_contains_scenario_info(self) -> None:
-        r = TestReport(
+        r = ScenarioReport(
             scenario="tavern",
             system="gurps4e",
             seed=42,

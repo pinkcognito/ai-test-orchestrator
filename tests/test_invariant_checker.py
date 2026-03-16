@@ -6,7 +6,7 @@ import pytest
 
 from ai_test_orchestrator.invariant_checker import InvariantChecker
 from ai_test_orchestrator.invariants.base import BaseInvariantCheck
-from ai_test_orchestrator.models import Severity, TurnResult
+from ai_test_orchestrator.models import CriticalFailureError, Severity, TurnResult
 
 
 class AlwaysPassCheck(BaseInvariantCheck):
@@ -64,9 +64,9 @@ class TestInvariantChecker:
         checker.check_turn(_make_turn(), {}, [])
         assert checker.has_critical_failure is True
 
-    def test_fail_fast_raises_stop_iteration(self) -> None:
+    def test_fail_fast_raises_critical_failure(self) -> None:
         checker = InvariantChecker(checks=[CriticalFailCheck()], fail_fast=True)
-        with pytest.raises(StopIteration, match="Critical failure"):
+        with pytest.raises(CriticalFailureError, match="Critical failure"):
             checker.check_turn(_make_turn(), {}, [])
 
     def test_fail_fast_does_not_trigger_on_error(self) -> None:

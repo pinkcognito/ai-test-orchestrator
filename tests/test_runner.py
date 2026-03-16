@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 from ai_test_orchestrator.invariant_checker import InvariantChecker
@@ -159,3 +160,26 @@ class TestScenarioRunner:
             assert report.turns_executed == 2
         finally:
             Path(f.name).unlink(missing_ok=True)
+
+
+class TestLoadScenarioValidation:
+    def test_non_dict_yaml_raises(self) -> None:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write("- just\n- a\n- list\n")
+            path = f.name
+        try:
+            with pytest.raises(ValueError, match="YAML mapping"):
+                load_scenario(path)
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    def test_action_missing_input_raises(self) -> None:
+        data = {"name": "bad", "actions": [{"tags": ["oops"]}]}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(data, f)
+            path = f.name
+        try:
+            with pytest.raises(ValueError, match="'input' key"):
+                load_scenario(path)
+        finally:
+            Path(path).unlink(missing_ok=True)

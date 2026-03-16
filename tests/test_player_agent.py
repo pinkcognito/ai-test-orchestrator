@@ -54,3 +54,12 @@ class TestPlayerAgent:
         agent = PlayerAgent(self._make_scenario([]))
         assert agent.has_next is False
         assert agent.next_action() is None
+
+    def test_last_step_tracks_previous(self) -> None:
+        agent = PlayerAgent(self._make_scenario(["first", "second"]))
+        assert agent.last_step is None
+        agent.next_action()
+        assert agent.last_step is not None
+        assert agent.last_step.input == "first"
+        agent.next_action()
+        assert agent.last_step.input == "second"
