@@ -1,0 +1,18 @@
+# Example scenario for CI and smoke testing.
+# Uses the built-in stub adapter (no real SUT needed).
+name: Tavern Social Interaction
+system: gurps4e
+seed: 42
+max_turns: 15
+fail_fast: false
+enable_narrative_judge: false
+pc:
+  name: Dai Blackthorn
+  location: The Broken Anvil Inn
+actions:
+  - input: "I look around the room"
+    tags: [perception, exploration]
+  - input: "I approach the innkeeper"
+    tags: [social]
+  - input: "I order an ale and ask about local rumors"
+    tags: [social, investigation]

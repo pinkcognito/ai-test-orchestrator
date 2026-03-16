@@ -1,0 +1,51 @@
+name: Scenario Tests
+
+# Runs example scenarios through the framework in offline mode.
+# Consumer repos (e.g., AI Dungeonmaster) will have their own scenario
+# workflows with real SUTAdapters. This workflow validates the framework's
+# own example scenarios with the stub adapter.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  offline-scenarios:
+    name: Offline Scenarios
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [42, 123, 7]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: pip install -e ".[dev]"
+
+      - name: Run example scenario (seed ${{ matrix.seed }})
+        run: |
+          python -m ai_test_orchestrator \
+            --scenario data/scenarios/example.yaml \
+            --adapter ai_test_orchestrator.stub_adapter:StubAdapter \
+            --seed ${{ matrix.seed }} \
+            --json-report test_results/report_seed${{ matrix.seed }}.json
+
+      - name: Upload transcripts and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scenario-results-seed${{ matrix.seed }}
+          path: test_results/
+          retention-days: 30
